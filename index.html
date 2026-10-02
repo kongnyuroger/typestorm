@@ -1,0 +1,89 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover">
+<title>Typestorm</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Chakra+Petch:wght@500;700&family=IBM+Plex+Mono:wght@500;600&display=swap">
+<link rel="stylesheet" href="style.css">
+</head>
+<body>
+
+<div id="stage">
+  <canvas id="game"></canvas>
+  <input id="kbd" type="text" autocomplete="off" autocapitalize="off" autocorrect="off" spellcheck="false" aria-label="Type here">
+
+  <!-- Heads-up display -->
+  <div class="hud" id="hud" hidden>
+    <div class="hud-row">
+      <div class="stat"><span class="stat-label">Score</span><span class="stat-value" id="hudScore">0</span></div>
+      <div class="hud-controls">
+        <button class="small" id="btnMute" type="button">Sound on</button>
+        <button class="small" id="btnPause" type="button">Pause</button>
+      </div>
+      <div class="stat right"><span class="stat-label">Wave</span><span class="stat-value" id="hudWave">1</span></div>
+    </div>
+    <div></div>
+    <div class="hud-row">
+      <div class="stat"><span class="stat-label">Shields</span><div class="pips" id="hudShields"></div></div>
+      <div class="stat right"><span class="stat-label">Accuracy · Bombs</span>
+        <span class="stat-value" id="hudAcc" style="font-size:16px">100%</span>
+        <div class="pips" id="hudBombs" style="justify-content:flex-end"></div>
+      </div>
+    </div>
+  </div>
+
+  <!-- Start menu -->
+  <div class="overlay" id="menu">
+    <div class="card">
+      <span class="eyebrow">A typing shooter</span>
+      <h1>Type<span class="hot">storm</span></h1>
+      <p>Enemy ships carry words. Type the first letter to lock on, then finish the word to fire. Every correct key sends a shot.</p>
+      <div class="keys">
+        <kbd>a–z</kbd><span>Lock on and shoot</span>
+        <kbd>Enter</kbd><span>Bomb: clears the screen (limited)</span>
+        <kbd>Backspace</kbd><span>Release the current target</span>
+        <kbd>Esc</kbd><span>Pause</span>
+      </div>
+      <div class="lang" role="group" aria-label="Word language">
+        <span class="lang-label">Words</span>
+        <button class="chip" type="button" data-lang="en" aria-pressed="true">English</button>
+        <button class="chip" type="button" data-lang="fr" aria-pressed="false">Français</button>
+      </div>
+      <button class="go" id="btnStart" type="button">Start</button>
+      <span class="best" id="bestLine"></span>
+      <span class="hint-touch">On a phone, tap the screen to bring up the keyboard.</span>
+    </div>
+  </div>
+
+  <!-- Pause -->
+  <div class="overlay" id="pause" hidden>
+    <div class="card">
+      <span class="eyebrow">Paused</span>
+      <h2>Take a breath</h2>
+      <button class="go" id="btnResume" type="button">Resume</button>
+    </div>
+  </div>
+
+  <!-- Game over -->
+  <div class="overlay" id="over" hidden>
+    <div class="card">
+      <span class="eyebrow">Shields down</span>
+      <h2 id="overTitle">Game over</h2>
+      <div class="results">
+        <div class="stat"><span class="stat-label">Score</span><span class="stat-value" id="rScore">0</span></div>
+        <div class="stat"><span class="stat-label">Wave reached</span><span class="stat-value" id="rWave">1</span></div>
+        <div class="stat"><span class="stat-label">Accuracy</span><span class="stat-value" id="rAcc">0%</span></div>
+        <div class="stat"><span class="stat-label">Words per min</span><span class="stat-value" id="rWpm">0</span></div>
+      </div>
+      <span class="best" id="rBest"></span>
+      <button class="go" id="btnAgain" type="button">Play again</button>
+    </div>
+  </div>
+</div>
+
+<script src="script.js"></script>
+</body>
+</html>
