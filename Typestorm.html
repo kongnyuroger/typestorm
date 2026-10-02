@@ -1,0 +1,517 @@
+<!doctype html><html><head><meta charset=utf8><meta name=viewport content="width=device-width,initial-scale=1,viewport-fit=cover"><style>:root{color-scheme:light;box-sizing:border-box;padding-top:env(safe-area-inset-top,0px);padding-bottom:env(safe-area-inset-bottom,0px)}html{scroll-padding-top:env(safe-area-inset-top,0px)}body{margin:0;padding:0;font:14px -apple-system,BlinkMacSystemFont,sans-serif;background:#faf9f5;color:#141413}img{max-width:100%}[hidden]:not([hidden=until-found i]){display:none!important}</style></head><body>
+<title>Typestorm</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Chakra+Petch:wght@500;700&family=IBM+Plex+Mono:wght@500;600&display=swap">
+<style>
+/* Layout: one full-height stage; canvas underneath, HTML HUD + menus layered on top. Single committed dark "space arcade" look. */
+:root {
+  --void: #070b14;        /* space */
+  --panel: rgba(12, 18, 32, 0.86);
+  --ink: #e8ecf5;         /* text */
+  --dim: #6b7694;         /* secondary text, stars */
+  --ship: #5ce1e6;        /* player, bullets */
+  --foe: #e0607e;         /* enemy hulls */
+  --lock: #ffb547;        /* locked-on target, typed letters */
+  --line: rgba(107, 118, 148, 0.28);
+  --f-display: "Chakra Petch", "Trebuchet MS", system-ui, sans-serif;
+  --f-mono: "IBM Plex Mono", ui-monospace, "SFMono-Regular", Menlo, Consolas, monospace;
+  color-scheme: dark;
+}
+html, body { height: 100%; }
+body { background: var(--void); color: var(--ink); font-family: var(--f-display); overflow: hidden; }
+
+#stage { position: relative; height: 100%; width: 100%; overflow: hidden; touch-action: manipulation; cursor: text; }
+canvas { position: absolute; inset: 0; width: 100%; height: 100%; display: block; }
+
+/* Off-screen input that summons the phone keyboard and receives every typed character */
+#kbd { position: absolute; left: -9999px; top: 0; opacity: 0; font-size: 16px; width: 1px; height: 1px; }
+
+/* ---------- HUD ---------- */
+.hud { position: absolute; inset: 0; pointer-events: none; padding: 14px 16px; display: grid; grid-template-rows: auto 1fr auto; }
+.hud-row { display: flex; justify-content: space-between; align-items: flex-start; gap: 12px; }
+.stat { display: grid; gap: 2px; }
+.stat-label { font-size: 10px; letter-spacing: 0.16em; text-transform: uppercase; color: var(--dim); }
+.stat-value { font-family: var(--f-mono); font-size: 22px; font-variant-numeric: tabular-nums; }
+.stat.right { text-align: right; }
+.pips { display: flex; gap: 6px; margin-top: 4px; }
+.pip { width: 14px; height: 6px; background: var(--ship); transform: skewX(-20deg); }
+.pip.off { background: var(--line); }
+.pip.bomb { background: var(--lock); }
+.hud-controls { pointer-events: auto; display: flex; gap: 8px; }
+.hud[hidden] { display: none !important; }
+
+/* ---------- Overlays (menu / pause / game over) ---------- */
+.overlay { position: absolute; inset: 0; display: grid; place-items: center; padding-inline: 16px; background: radial-gradient(ellipse at 50% 40%, rgba(7,11,20,0.35), rgba(7,11,20,0.82)); }
+.card { width: min(440px, 100%); background: var(--panel); border: 1px solid var(--line); padding: 28px 24px; display: grid; gap: 18px; backdrop-filter: blur(4px); }
+.eyebrow { font-size: 11px; letter-spacing: 0.22em; text-transform: uppercase; color: var(--ship); }
+h1 { margin: 0; font-size: clamp(40px, 11vw, 64px); line-height: 0.95; letter-spacing: -0.01em; font-weight: 700; text-wrap: balance; }
+h1 .hot { color: var(--lock); }
+h2 { margin: 0; font-size: 32px; font-weight: 700; text-wrap: balance; }
+p { margin: 0; line-height: 1.55; color: #c4cadb; max-width: 60ch; }
+.keys { display: grid; grid-template-columns: auto 1fr; gap: 8px 14px; font-size: 13px; color: #c4cadb; align-items: center; }
+kbd { font-family: var(--f-mono); font-size: 12px; border: 1px solid var(--line); border-bottom-width: 2px; padding: 2px 7px; color: var(--ink); white-space: nowrap; }
+.lang { display: flex; gap: 8px; flex-wrap: wrap; align-items: center; }
+.lang-label { font-size: 11px; letter-spacing: 0.16em; text-transform: uppercase; color: var(--dim); margin-right: 4px; }
+button { font: inherit; cursor: pointer; }
+.chip { background: transparent; color: var(--ink); border: 1px solid var(--line); padding: 6px 12px; font-size: 13px; letter-spacing: 0.04em; }
+.chip[aria-pressed="true"] { border-color: var(--ship); color: var(--ship); }
+.go { background: var(--ship); color: var(--void); border: 0; padding: 13px 18px; font-weight: 700; font-size: 16px; letter-spacing: 0.08em; text-transform: uppercase; clip-path: polygon(0 0, 100% 0, 100% 70%, 94% 100%, 0 100%); }
+.go:hover { filter: brightness(1.1); }
+.small { background: rgba(12,18,32,0.7); color: var(--dim); border: 1px solid var(--line); padding: 4px 10px; font-size: 12px; letter-spacing: 0.08em; text-transform: uppercase; }
+.small:hover { color: var(--ink); }
+button:focus-visible { outline: 2px solid var(--lock); outline-offset: 3px; }
+.results { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 12px; }
+.results .stat-value { font-size: 26px; }
+.best { font-size: 13px; color: var(--dim); }
+.best b { color: var(--lock); font-family: var(--f-mono); font-weight: 600; }
+.hint-touch { font-size: 12px; color: var(--dim); }
+@media (prefers-reduced-motion: reduce) { .go { transition: none; } }
+</style>
+
+<div id="stage">
+  <canvas id="game"></canvas>
+  <input id="kbd" type="text" autocomplete="off" autocapitalize="off" autocorrect="off" spellcheck="false" aria-label="Type here">
+
+  <!-- Heads-up display -->
+  <div class="hud" id="hud" hidden>
+    <div class="hud-row">
+      <div class="stat"><span class="stat-label">Score</span><span class="stat-value" id="hudScore">0</span></div>
+      <div class="hud-controls">
+        <button class="small" id="btnMute" type="button">Sound on</button>
+        <button class="small" id="btnPause" type="button">Pause</button>
+      </div>
+      <div class="stat right"><span class="stat-label">Wave</span><span class="stat-value" id="hudWave">1</span></div>
+    </div>
+    <div></div>
+    <div class="hud-row">
+      <div class="stat"><span class="stat-label">Shields</span><div class="pips" id="hudShields"></div></div>
+      <div class="stat right"><span class="stat-label">Accuracy · Bombs</span>
+        <span class="stat-value" id="hudAcc" style="font-size:16px">100%</span>
+        <div class="pips" id="hudBombs" style="justify-content:flex-end"></div>
+      </div>
+    </div>
+  </div>
+
+  <!-- Start menu -->
+  <div class="overlay" id="menu">
+    <div class="card">
+      <span class="eyebrow">A typing shooter</span>
+      <h1>Type<span class="hot">storm</span></h1>
+      <p>Enemy ships carry words. Type the first letter to lock on, then finish the word to fire. Every correct key sends a shot.</p>
+      <div class="keys">
+        <kbd>a–z</kbd><span>Lock on and shoot</span>
+        <kbd>Enter</kbd><span>Bomb: clears the screen (limited)</span>
+        <kbd>Backspace</kbd><span>Release the current target</span>
+        <kbd>Esc</kbd><span>Pause</span>
+      </div>
+      <div class="lang" role="group" aria-label="Word language">
+        <span class="lang-label">Words</span>
+        <button class="chip" type="button" data-lang="en" aria-pressed="true">English</button>
+        <button class="chip" type="button" data-lang="fr" aria-pressed="false">Français</button>
+      </div>
+      <button class="go" id="btnStart" type="button">Start</button>
+      <span class="best" id="bestLine"></span>
+      <span class="hint-touch">On a phone, tap the screen to bring up the keyboard.</span>
+    </div>
+  </div>
+
+  <!-- Pause -->
+  <div class="overlay" id="pause" hidden>
+    <div class="card">
+      <span class="eyebrow">Paused</span>
+      <h2>Take a breath</h2>
+      <button class="go" id="btnResume" type="button">Resume</button>
+    </div>
+  </div>
+
+  <!-- Game over -->
+  <div class="overlay" id="over" hidden>
+    <div class="card">
+      <span class="eyebrow">Shields down</span>
+      <h2 id="overTitle">Game over</h2>
+      <div class="results">
+        <div class="stat"><span class="stat-label">Score</span><span class="stat-value" id="rScore">0</span></div>
+        <div class="stat"><span class="stat-label">Wave reached</span><span class="stat-value" id="rWave">1</span></div>
+        <div class="stat"><span class="stat-label">Accuracy</span><span class="stat-value" id="rAcc">0%</span></div>
+        <div class="stat"><span class="stat-label">Words per min</span><span class="stat-value" id="rWpm">0</span></div>
+      </div>
+      <span class="best" id="rBest"></span>
+      <button class="go" id="btnAgain" type="button">Play again</button>
+    </div>
+  </div>
+</div>
+
+<script>
+/* =====================================================================
+   TYPESTORM — a ZType-style typing shooter in one file, no engine.
+   Sections follow the same layers ZType uses:
+     1. Setup (canvas, sizing, sound)
+     2. Content (word lists)
+     3. Entities (Player, Enemy, Bullet, Particle, Stars)
+     4. Game rules (waves, spawning, scoring, targeting)
+     5. Input (keyboard + phone keyboard)
+     6. Game loop (update → draw, ~60 times per second)
+   ===================================================================== */
+
+/* ---------- 1. SETUP ---------- */
+const stage = document.getElementById('stage');
+const canvas = document.getElementById('game');
+const ctx = canvas.getContext('2d');
+const kbd = document.getElementById('kbd');
+let W = 0, H = 0, DPR = 1;
+
+const COLORS = { ship: '#5ce1e6', foe: '#e0607e', lock: '#ffb547', ink: '#e8ecf5', dim: '#6b7694' };
+const WORD_FONT = '600 15px "IBM Plex Mono", ui-monospace, Menlo, monospace';
+const BANNER_FONT = '700 34px "Chakra Petch", system-ui, sans-serif';
+
+function resize() {
+  const r = stage.getBoundingClientRect();
+  DPR = Math.min(window.devicePixelRatio || 1, 2);
+  W = r.width; H = r.height;
+  canvas.width = Math.round(W * DPR);
+  canvas.height = Math.round(H * DPR);
+  ctx.setTransform(DPR, 0, 0, DPR, 0, 0);   // draw in CSS pixels, stay sharp on retina
+  player.x = W / 2; player.y = H - 70;
+}
+
+// Tiny synth: no audio files, just oscillators. Browsers only allow sound after a click/keypress.
+let actx = null, muted = false;
+function initAudio() {
+  if (actx) return;
+  try { actx = new (window.AudioContext || window.webkitAudioContext)(); } catch (e) { actx = null; }
+}
+function beep(freq, dur, type = 'square', vol = 0.03, slide = 0) {
+  if (!actx || muted) return;
+  const t = actx.currentTime, o = actx.createOscillator(), g = actx.createGain();
+  o.type = type; o.frequency.setValueAtTime(freq, t);
+  if (slide) o.frequency.exponentialRampToValueAtTime(Math.max(30, freq + slide), t + dur);
+  g.gain.setValueAtTime(vol, t); g.gain.exponentialRampToValueAtTime(0.0001, t + dur);
+  o.connect(g).connect(actx.destination); o.start(t); o.stop(t + dur);
+}
+const sfx = {
+  shoot: () => beep(880, 0.06, 'square', 0.02, 300),
+  miss:  () => beep(140, 0.12, 'sawtooth', 0.03),
+  boom:  () => beep(220, 0.35, 'triangle', 0.06, -180),
+  hurt:  () => beep(90, 0.5, 'sawtooth', 0.07, -50),
+  wave:  () => { beep(440, 0.12, 'triangle', 0.04); setTimeout(() => beep(660, 0.18, 'triangle', 0.04), 120); },
+};
+
+/* ---------- 2. CONTENT: word lists ---------- */
+const WORDS = {
+  en: `cat sun map box key run zip fog ice web gas ray orb arc hub
+       code byte loop node wave beam dust star moon core ship grid bolt echo flux
+       laser orbit comet pixel radar shield rocket planet signal vector engine cursor
+       galaxy nebula plasma photon quasar reactor capsule gravity voltage asteroid
+       keyboard database protocol satellite telescope algorithm hyperdrive frequency
+       interstellar constellation`.split(/\s+/),
+  fr: `sol feu air mer vol ami roi nid dos jeu lit mot
+       code lune ciel onde vent sable pluie neige terre fusee etoile
+       vaisseau planete clavier soleil nuage orage espace lumiere energie
+       comete galaxie satellite programme ordinateur telescope atmosphere
+       gravitation astronaute universite navigation reseau`.split(/\s+/)
+};
+// French words are shown with accents; typing matches the base letter (é → e) so any keyboard works.
+const ACCENTED = { fusee: 'fusée', etoile: 'étoile', planete: 'planète', comete: 'comète', telescope: 'télescope', atmosphere: 'atmosphère', universite: 'université', reseau: 'réseau', lumiere: 'lumière', energie: 'énergie' };
+const base = ch => ch.normalize('NFD').replace(/[̀-ͯ]/g, '').toLowerCase();
+
+/* ---------- 3. ENTITIES ---------- */
+// Every object in the world has x/y, an update(dt) and a draw(). The loop calls both each frame.
+
+const player = { x: 0, y: 0, angle: -Math.PI / 2 };
+
+class Enemy {
+  constructor(word, x, y, speed) {
+    this.word = word;          // what's displayed
+    this.typed = 0;            // how many letters the player has hit
+    this.pending = 0;          // bullets still flying toward this ship
+    this.x = x; this.y = y; this.speed = speed;
+    this.doomed = false;       // fully typed; explodes when the last bullet lands
+    this.dead = false;
+    this.flash = 0;
+    this.t = Math.random() * 10;
+  }
+  get next() { return base(this.word[this.typed]); }
+  update(dt) {
+    this.t += dt;
+    const dx = player.x - this.x, dy = player.y - this.y, d = Math.hypot(dx, dy) || 1;
+    const s = this.speed * (this.doomed ? 0.25 : 1);
+    this.x += (dx / d) * s * dt + Math.sin(this.t * 1.7) * 10 * dt;   // home in, with a slight weave
+    this.y += (dy / d) * s * dt;
+    this.angle = Math.atan2(dy, dx);
+    if (this.flash > 0) this.flash -= dt;
+    if (d < 24 && !this.dead) game.playerHit(this);                    // collision with the player
+  }
+  draw() {
+    const locked = game.target === this;
+    // hull
+    ctx.save();
+    ctx.translate(this.x, this.y); ctx.rotate(this.angle);
+    ctx.fillStyle = this.flash > 0 ? '#ffffff' : COLORS.foe;
+    ctx.beginPath(); ctx.moveTo(12, 0); ctx.lineTo(-9, -9); ctx.lineTo(-4, 0); ctx.lineTo(-9, 9); ctx.closePath(); ctx.fill();
+    ctx.restore();
+    if (this.doomed) return;
+    // word label: typed part in amber, rest in white
+    ctx.font = WORD_FONT;
+    const done = this.word.slice(0, this.typed), rest = this.word.slice(this.typed);
+    const wDone = ctx.measureText(done).width, wAll = ctx.measureText(this.word).width;
+    const lx = Math.max(6, Math.min(W - wAll - 14, this.x - wAll / 2)), ly = this.y + 18;
+    ctx.fillStyle = locked ? 'rgba(255,181,71,0.14)' : 'rgba(7,11,20,0.75)';
+    ctx.fillRect(lx - 6, ly - 2, wAll + 12, 22);
+    if (locked) { ctx.strokeStyle = COLORS.lock; ctx.lineWidth = 1; ctx.strokeRect(lx - 6.5, ly - 2.5, wAll + 13, 23); }
+    ctx.textBaseline = 'top';
+    ctx.fillStyle = locked ? COLORS.lock : COLORS.dim; ctx.fillText(done, lx, ly + 2);
+    ctx.fillStyle = COLORS.ink; ctx.fillText(rest, lx + wDone, ly + 2);
+  }
+}
+
+class Bullet {
+  constructor(target) { this.x = player.x; this.y = player.y - 10; this.target = target; this.dead = false; }
+  update(dt) {
+    const t = this.target;
+    if (t.dead) { this.dead = true; return; }
+    const dx = t.x - this.x, dy = t.y - this.y, d = Math.hypot(dx, dy);
+    const step = 1100 * dt;
+    if (d <= step + 6) {                      // arrived: hit!
+      this.dead = true;
+      t.pending--; t.flash = 0.06; t.y -= 4;   // small knockback
+      burst(t.x, t.y, COLORS.ship, 4, 80);
+      if (t.doomed && t.pending <= 0) game.destroy(t);
+      return;
+    }
+    this.px = this.x; this.py = this.y;
+    this.x += (dx / d) * step; this.y += (dy / d) * step;
+  }
+  draw() {
+    ctx.strokeStyle = COLORS.ship; ctx.lineWidth = 2;
+    ctx.beginPath(); ctx.moveTo(this.px ?? this.x, this.py ?? this.y); ctx.lineTo(this.x, this.y); ctx.stroke();
+  }
+}
+
+class Particle {
+  constructor(x, y, color, speed) {
+    const a = Math.random() * Math.PI * 2, s = speed * (0.3 + Math.random());
+    this.x = x; this.y = y; this.vx = Math.cos(a) * s; this.vy = Math.sin(a) * s;
+    this.life = this.max = 0.4 + Math.random() * 0.5; this.color = color; this.dead = false;
+  }
+  update(dt) { this.x += this.vx * dt; this.y += this.vy * dt; this.vx *= 0.96; this.vy *= 0.96; if ((this.life -= dt) <= 0) this.dead = true; }
+  draw() { ctx.globalAlpha = Math.max(0, this.life / this.max); ctx.fillStyle = this.color; ctx.fillRect(this.x - 1.5, this.y - 1.5, 3, 3); ctx.globalAlpha = 1; }
+}
+function burst(x, y, color, n, speed) { for (let i = 0; i < n; i++) game.particles.push(new Particle(x, y, color, speed)); }
+
+// Parallax starfield: three layers moving at different speeds give depth for almost no cost.
+const stars = Array.from({ length: 140 }, () => ({ x: Math.random(), y: Math.random(), z: [0.2, 0.5, 1][Math.floor(Math.random() * 3)] }));
+function drawStars(dt) {
+  for (const s of stars) {
+    s.y += s.z * 0.04 * dt; if (s.y > 1) { s.y -= 1; s.x = Math.random(); }
+    ctx.globalAlpha = 0.25 + s.z * 0.6; ctx.fillStyle = s.z === 1 ? COLORS.ink : COLORS.dim;
+    ctx.fillRect(s.x * W, s.y * H, s.z === 1 ? 2 : 1.2, s.z === 1 ? 2 : 1.2);
+  }
+  ctx.globalAlpha = 1;
+}
+function drawPlayer() {
+  ctx.save(); ctx.translate(player.x, player.y); ctx.rotate(player.angle + Math.PI / 2);
+  ctx.fillStyle = COLORS.ship; ctx.shadowColor = COLORS.ship; ctx.shadowBlur = 14;
+  ctx.beginPath(); ctx.moveTo(0, -16); ctx.lineTo(11, 12); ctx.lineTo(0, 6); ctx.lineTo(-11, 12); ctx.closePath(); ctx.fill();
+  ctx.restore();
+}
+
+/* ---------- 4. GAME RULES ---------- */
+const game = {
+  state: 'menu',            // menu | play | paused | over
+  lang: 'en',
+  enemies: [], bullets: [], particles: [],
+  target: null,
+  reset() {
+    Object.assign(this, { enemies: [], bullets: [], particles: [], target: null, wave: 0, score: 0, hits: 0, misses: 0,
+      streak: 0, shields: 3, bombs: 1, shake: 0, banner: null, queue: [], spawnTimer: 0, betweenWaves: 0, startTime: performance.now(), charsTyped: 0 });
+    this.nextWave();
+  },
+  nextWave() {
+    this.wave++;
+    if (this.wave > 1 && this.wave % 3 === 1 && this.bombs < 3) this.bombs++;
+    const count = 4 + this.wave * 2;
+    const maxLen = 3 + this.wave, minLen = Math.min(3 + Math.floor(this.wave / 3), 8);
+    const pool = WORDS[this.lang].filter(w => w.length <= maxLen && w.length >= Math.min(minLen, maxLen));
+    this.queue = Array.from({ length: count }, () => pool[Math.floor(Math.random() * pool.length)]);
+    this.spawnTimer = 0.8;
+    this.banner = { text: 'WAVE ' + this.wave, t: 2 };
+    sfx.wave(); updateHud();
+  },
+  spawn() {
+    // Prefer a word whose first letter isn't already on screen, so the first key is never ambiguous.
+    const used = new Set(this.enemies.filter(e => !e.doomed).map(e => e.next));
+    let i = this.queue.findIndex(w => !used.has(w[0]));
+    if (i < 0) i = 0;
+    const raw = this.queue.splice(i, 1)[0];
+    const word = this.lang === 'fr' ? (ACCENTED[raw] || raw) : raw;
+    const speed = (24 + this.wave * 5) * Math.max(0.7, Math.min(1.3, H / 700));
+    this.enemies.push(new Enemy(word, 40 + Math.random() * (W - 80), -20, speed));
+  },
+  typeChar(ch) {
+    const c = base(ch);
+    if (!/^[a-z]$/.test(c)) return;
+    let t = this.target;
+    if (!t) {
+      // Lock on: among ships whose next letter matches, pick the one closest to the player.
+      const cands = this.enemies.filter(e => !e.doomed && !e.dead && e.y > -15 && e.next === c);
+      if (!cands.length) return this.miss();
+      cands.sort((a, b) => Math.hypot(player.x - a.x, player.y - a.y) - Math.hypot(player.x - b.x, player.y - b.y));
+      t = this.target = cands[0];
+    }
+    if (t.next !== c) return this.miss();
+    t.typed++; t.pending++;
+    this.bullets.push(new Bullet(t));
+    this.hits++; this.streak++; this.charsTyped++;
+    this.score += 1 + Math.floor(this.streak / 10);           // streak multiplier
+    player.angle = Math.atan2(t.y - player.y, t.x - player.x);
+    sfx.shoot();
+    if (t.typed >= t.word.length) { t.doomed = true; this.target = null; this.score += t.word.length * 10; }
+    updateHud();
+  },
+  miss() { this.misses++; this.streak = 0; sfx.miss(); updateHud(); },
+  destroy(e) {
+    e.dead = true; burst(e.x, e.y, COLORS.foe, 22, 160); burst(e.x, e.y, COLORS.lock, 8, 90);
+    this.shake = Math.max(this.shake, 3); sfx.boom();
+  },
+  playerHit(e) {
+    e.dead = true; if (this.target === e) this.target = null;
+    burst(e.x, e.y, COLORS.foe, 26, 200); this.shake = 12;
+    if (this.state !== 'play') return;
+    sfx.hurt();
+    this.shields--; updateHud();
+    if (this.shields <= 0) this.gameOver();
+  },
+  bomb() {
+    if (this.bombs <= 0) return;
+    this.bombs--; this.target = null;
+    for (const e of this.enemies) if (!e.dead) this.destroy(e);
+    this.shake = 14; updateHud();
+  },
+  gameOver() {
+    this.state = 'over';
+    burst(player.x, player.y, COLORS.ship, 60, 260);
+    const mins = (performance.now() - this.startTime) / 60000;
+    const acc = accuracy();
+    let best = 0; try { best = +localStorage.getItem('typestorm-best') || 0; } catch (e) {}
+    const newBest = this.score > best;
+    if (newBest) { try { localStorage.setItem('typestorm-best', this.score); } catch (e) {} }
+    $('rScore').textContent = this.score; $('rWave').textContent = this.wave;
+    $('rAcc').textContent = acc + '%'; $('rWpm').textContent = Math.round(this.charsTyped / 5 / Math.max(mins, 0.1));
+    $('overTitle').textContent = newBest ? 'New best score' : 'Game over';
+    $('rBest').innerHTML = newBest ? '' : 'Best: <b>' + best + '</b>';
+    setTimeout(() => { show('over'); $('hud').hidden = true; }, 900);
+  },
+  update(dt) {
+    if (this.spawnTimer > 0) this.spawnTimer -= dt;
+    else if (this.queue.length) { this.spawn(); this.spawnTimer = Math.max(0.55, 2.2 - this.wave * 0.13) * (0.7 + Math.random() * 0.6); }
+    for (const list of [this.enemies, this.bullets, this.particles]) for (const o of list) o.update(dt);
+    // Remove finished objects
+    this.enemies = this.enemies.filter(e => !e.dead);
+    this.bullets = this.bullets.filter(b => !b.dead);
+    this.particles = this.particles.filter(p => !p.dead);
+    if (this.state === 'play' && !this.queue.length && !this.enemies.length) {
+      this.betweenWaves += dt;
+      if (this.betweenWaves > 1.4) { this.betweenWaves = 0; this.nextWave(); }
+    }
+    if (this.banner && (this.banner.t -= dt) <= 0) this.banner = null;
+    this.shake *= 0.88;
+  },
+  draw() {
+    const sx = (Math.random() - 0.5) * this.shake, sy = (Math.random() - 0.5) * this.shake;
+    ctx.save(); ctx.translate(sx, sy);
+    for (const b of this.bullets) b.draw();
+    for (const e of this.enemies) e.draw();
+    for (const p of this.particles) p.draw();
+    if (this.state === 'play' || this.state === 'paused') drawPlayer();
+    if (this.target) {           // faint aiming line
+      ctx.strokeStyle = 'rgba(255,181,71,0.25)'; ctx.setLineDash([3, 6]);
+      ctx.beginPath(); ctx.moveTo(player.x, player.y); ctx.lineTo(this.target.x, this.target.y); ctx.stroke(); ctx.setLineDash([]);
+    }
+    ctx.restore();
+    if (this.banner) {
+      ctx.globalAlpha = Math.min(1, this.banner.t); ctx.font = BANNER_FONT; ctx.textAlign = 'center'; ctx.textBaseline = 'middle';
+      ctx.fillStyle = COLORS.ink; ctx.fillText(this.banner.text, W / 2, H * 0.4); ctx.textAlign = 'left'; ctx.globalAlpha = 1;
+    }
+  }
+};
+
+// Attract mode: a few drifting ships behind the start menu so the screen is alive at rest.
+function attract() {
+  game.enemies = []; game.bullets = []; game.particles = []; game.target = null; game.queue = []; game.shake = 0;
+  const demo = ['orbit', 'laser', 'comet', 'signal', 'plasma'];
+  demo.forEach((w, i) => game.enemies.push(Object.assign(new Enemy(w, W * (0.15 + i * 0.18), H * (0.12 + (i % 2) * 0.12), 0), { typed: i === 1 ? 2 : 0 })));
+  game.target = game.enemies[1];
+}
+
+/* ---------- HUD helpers ---------- */
+const $ = id => document.getElementById(id);
+const accuracy = () => { const t = game.hits + game.misses; return t ? Math.round((game.hits / t) * 100) : 100; };
+function pips(el, n, max, cls) { el.innerHTML = Array.from({ length: max }, (_, i) => `<span class="pip ${i < n ? cls : 'off'}"></span>`).join(''); }
+function updateHud() {
+  $('hudScore').textContent = game.score; $('hudWave').textContent = game.wave; $('hudAcc').textContent = accuracy() + '%';
+  pips($('hudShields'), game.shields, 3, ''); pips($('hudBombs'), game.bombs, 3, 'bomb');
+}
+function show(id) { for (const o of ['menu', 'pause', 'over']) $(o).hidden = o !== id; }
+function showBest() {
+  let best = 0; try { best = +localStorage.getItem('typestorm-best') || 0; } catch (e) {}
+  $('bestLine').innerHTML = best ? 'Your best: <b>' + best + '</b>' : '';
+}
+
+function start() {
+  initAudio(); if (actx && actx.state === 'suspended') actx.resume();
+  game.reset(); game.state = 'play'; show(null); $('hud').hidden = false; updateHud();
+  kbd.focus();
+}
+function pause() { if (game.state !== 'play') return; game.state = 'paused'; show('pause'); }
+function resume() { if (game.state !== 'paused') return; game.state = 'play'; show(null); kbd.focus(); }
+
+/* ---------- 5. INPUT ---------- */
+// All letters arrive through the hidden <input>, which works for physical keyboards AND phone keyboards.
+kbd.addEventListener('input', () => {
+  const v = kbd.value; kbd.value = '';
+  if (game.state === 'play') for (const ch of v) game.typeChar(ch);
+});
+kbd.addEventListener('keydown', e => {
+  if (e.key === 'Enter') { e.preventDefault(); if (game.state === 'play') game.bomb(); else if (game.state !== 'paused') start(); }
+  else if (e.key === 'Backspace') { e.preventDefault(); game.target = null; }
+  else if (e.key === 'Escape') { e.preventDefault(); game.state === 'paused' ? resume() : pause(); }
+});
+// If focus is anywhere else, typing still reaches the game.
+document.addEventListener('keydown', e => {
+  if (document.activeElement === kbd || e.target.tagName === 'BUTTON' && e.key === 'Enter') return;
+  if (game.state === 'play' && e.key.length === 1) { e.preventDefault(); game.typeChar(e.key); }
+  else if (e.key === 'Enter' && game.state === 'play') { e.preventDefault(); game.bomb(); }
+  else if (e.key === 'Escape') game.state === 'paused' ? resume() : pause();
+});
+stage.addEventListener('pointerdown', e => { if (game.state === 'play' && !e.target.closest('button')) kbd.focus(); });
+window.addEventListener('blur', pause);
+
+$('btnStart').addEventListener('click', start);
+$('btnAgain').addEventListener('click', start);
+$('btnResume').addEventListener('click', resume);
+$('btnPause').addEventListener('click', () => { pause(); });
+$('btnMute').addEventListener('click', () => { muted = !muted; $('btnMute').textContent = muted ? 'Sound off' : 'Sound on'; kbd.focus(); });
+document.querySelectorAll('[data-lang]').forEach(b => b.addEventListener('click', () => {
+  game.lang = b.dataset.lang;
+  document.querySelectorAll('[data-lang]').forEach(x => x.setAttribute('aria-pressed', x === b));
+}));
+
+/* ---------- 6. GAME LOOP ---------- */
+let last = performance.now();
+function frame(now) {
+  const dt = Math.min((now - last) / 1000, 0.05);   // seconds since last frame, capped so tab switches don't teleport ships
+  last = now;
+  ctx.fillStyle = '#070b14'; ctx.fillRect(0, 0, W, H);
+  drawStars(dt);
+  if (game.state === 'play' || game.state === 'over' || game.state === 'menu') game.update(game.state === 'menu' ? 0 : dt);
+  game.draw();
+  requestAnimationFrame(frame);
+}
+
+window.addEventListener('resize', resize);
+resize(); attract(); showBest();
+requestAnimationFrame(frame);
+</script>
+
+</body></html>
